@@ -56,11 +56,13 @@ def run_sdlc_pipeline(text):
         f.write("User Story: As a user, I want to extract data.")
     status_flags["stories_approved"] = True
     time.sleep(1)
+    agent_logs.append("Architect Agent: Prepared technical requirements from user stories.")
+    time.sleep(1)
     status_flags["jira_created"] = True
     status_flags["jira_ticket"] = "JIRA-12345"
     agent_logs.append("JIRA Agent: Created ticket JIRA-12345 in backlog.")
     time.sleep(1)
-    agent_logs.append("CodeGen Agent: Generated Python code for requirement.")
+    agent_logs.append("CodeGen Agent: Generated Python code based on JIRA ticket.")
     result_files["code"] = f"program_{now}.py"
     with open(os.path.join(UPLOAD_DIR, result_files["code"]), 'w') as f:
         f.write("def factorial(n): return 1 if n==0 else n*factorial(n-1)")
@@ -70,8 +72,8 @@ def run_sdlc_pipeline(text):
 app.layout = dbc.Container([
     dbc.Row([
         dbc.Col([
-            html.Img(src="https://upload.wikimedia.org/wikipedia/en/thumb/1/16/Barclays_logo.svg/2560px-Barclays_logo.svg.png", height="60px"),
-            html.H4("🧠 SDLC Wizard Steps", className="text-primary mb-3 mt-3"),
+            html.Img(src="/assets/barclays_logo.png", style={"width": "80%", "marginBottom": "20px"}),
+            html.H4("🧠 SDLC Wizard Steps", className="text-primary mb-3"),
             html.Ul([
                 html.Li("1. Upload Requirement", className="text-light"),
                 html.Li("2. Generate User Stories", className="text-light"),
