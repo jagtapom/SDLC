@@ -69,6 +69,7 @@ def run_sdlc_pipeline(text):
 
 app.layout = dbc.Container([
     dbc.Row([
+        # Left Sidebar
         dbc.Col([
             html.H4("🧠 SDLC Wizard Steps", className="text-info mb-3"),
             html.Ul([
@@ -83,12 +84,16 @@ app.layout = dbc.Container([
             html.Hr(),
             html.Div(id='debug-info', className="text-light small")
         ], width=3),
+
+        # Right Main Area
         dbc.Col([
             html.H2("SDLC Automation", className="text-center text-light mb-4"),
+
             dbc.Breadcrumb(items=[
                 {"label": "Home", "href": "#"},
                 {"label": "Upload Requirement", "active": True}
             ], className="mb-4"),
+
             dbc.Card([
                 dbc.CardHeader("Upload Requirements File"),
                 dbc.CardBody([
@@ -105,19 +110,23 @@ app.layout = dbc.Container([
                             'textAlign': 'center',
                             'backgroundColor': '#222',
                             'color': '#ccc'
-                        ]
+                        }
                     ),
                     html.Div(id='file-upload-status', className="mt-3 text-success"),
                     dbc.Button("Process Requirements", id='run-button', color='primary', className='mt-3')
                 ])
             ]),
+
             html.Br(),
+
             dbc.Card([
                 dbc.CardHeader("Agent Execution Log"),
                 dbc.CardBody(html.Ul(id='agent-log', className="text-info small"))
             ])
         ], width=9)
     ]),
+
+    # Polling for agent status updates
     dcc.Interval(id='poll-interval', interval=2000, n_intervals=0, disabled=True)
 ], fluid=True)
 
