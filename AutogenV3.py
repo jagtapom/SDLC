@@ -6,9 +6,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 import PyPDF2
 import pandas as pd
-import plotly.express as px
 from datetime import datetime
 import os
+from main import run_sdlc_pipeline  # Use actual Autogen logic from main.py
 
 app = Dash(__name__, external_stylesheets=[dbc.themes.CYBORG])
 app.title = "SDLC Automation Dashboard"
@@ -32,8 +32,8 @@ result_files = {
     "code": None
 }
 
-result_store = {}
 agent_logs = []
+result_store = {}
 
 def extract_text_from_pdf(content):
     reader = PyPDF2.PdfReader(io.BytesIO(content))
@@ -45,36 +45,33 @@ def save_file(content, filename):
         f.write(content)
     return filepath
 
-def run_sdlc_pipeline(text):
-    agent_logs.clear()
-    time.sleep(1)
-    agent_logs.append("Translator Agent: Processed input and converted to English.")
-    time.sleep(1)
-    agent_logs.append("BA Agent: Created user stories from input.")
-    now = datetime.now().strftime("%Y%m%d_%H%M%S")
-    result_files["stories"] = f"stories_upload_{now}.txt"
-    with open(os.path.join(UPLOAD_DIR, result_files["stories"]), 'w') as f:
-        f.write("User Story: As a user, I want to extract data.")
-    status_flags["stories_approved"] = True
-    time.sleep(1)
-    agent_logs.append("Architect Agent: Prepared technical requirements from user stories.")
-    time.sleep(1)
-    status_flags["jira_created"] = True
-    status_flags["jira_ticket"] = "JIRA-12345"
-    agent_logs.append("JIRA Agent: Created ticket JIRA-12345 in backlog.")
-    time.sleep(1)
-    agent_logs.append("CodeGen Agent: Generated Python code based on JIRA ticket.")
-    result_files["code"] = f"program_{now}.py"
-    with open(os.path.join(UPLOAD_DIR, result_files["code"]), 'w') as f:
-        f.write("def factorial(n): return 1 if n==0 else n*factorial(n-1)")
-    status_flags["code_approved"] = True
-    status_flags["run_done"] = True
-
-def run_pipeline_async(task_id, content):
+def run_pipeline_async(task_id, text):
     try:
         result_store[task_id] = {"status": "running", "messages": []}
-        run_sdlc_pipeline(content)
-        result_store[task_id] = {"status": "done", "messages": agent_logs}
+        result = run_sdlc_pipeline(text)  # Calls actual Autogen pipeline
+
+        agent_logs.clear()
+        now = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        for step in result:
+            name, content = step.get("name"), step.get("content")
+            agent_logs.append(f"{name} Agent: {content[:60]}...")
+            if "story" in name.lower():
+                result_files["stories"] = f"stories_{now}.txt"
+                with open(os.path.join(UPLOAD_DIR, result_files["stories"]), 'w') as f:
+                    f.write(content)
+                status_flags["stories_approved"] = True
+            elif "code" in name.lower():
+                result_files["code"] = f"code_{now}.py"
+                with open(os.path.join(UPLOAD_DIR, result_files["code"]), 'w') as f:
+                    f.write(content)
+                status_flags["code_approved"] = True
+            elif "jira" in name.lower():
+                status_flags["jira_created"] = True
+                status_flags["jira_ticket"] = content.strip()
+
+        status_flags["run_done"] = True
+        result_store[task_id]["status"] = "done"
     except Exception as e:
         result_store[task_id] = {"status": "error", "messages": str(e)}
 
@@ -106,10 +103,7 @@ app.layout = dbc.Container([
                 dbc.CardBody([
                     dcc.Upload(
                         id='upload-data',
-                        children=html.Div([
-                            '📂 Drag and drop file here or ',
-                            html.A('Browse files')
-                        ]),
+                        children=html.Div(['📂 Drag and drop file here or ', html.A('Browse files')]),
                         multiple=False,
                         style={
                             'border': '2px dashed #aaa',
@@ -168,22 +162,21 @@ def run_pipeline_or_poll(n_clicks, poll):
     elif trigger == 'poll-interval':
         result = result_store.get(task_id)
         if not result:
-            return False, "No task started yet.", [html.Li("Waiting...")]
+            return False, "Waiting for task to start...", []
         if result['status'] == 'done':
-            logs = [html.Li(log) for log in result['messages']]
+            logs = [html.Li(log) for log in agent_logs]
             debug_lines = [
-                f"Workflow Status: code1_approved",
+                f"Workflow Status: ✅ Completed",
                 f"Stories File: {result_files['stories']}",
                 f"Stories Approved: {status_flags['stories_approved']}",
                 f"Program File: {os.path.join(UPLOAD_DIR, result_files['code'])}",
                 f"Code Approved: {status_flags['code_approved']}",
-                f"JIRA Ticket: {status_flags['jira_ticket']}",
-                f"Chat Manager: Active"
+                f"JIRA Ticket: {status_flags['jira_ticket']}"
             ]
             return True, html.Ul([html.Li(l) for l in debug_lines]), logs
         elif result['status'] == 'error':
-            return True, dbc.Alert(result['messages'], color='danger'), []
-        return False, "⏳ Processing...", [html.Li("Waiting for results...")]
+            return True, f"❌ Error: {result['messages']}", [html.Li("Failure during processing")] 
+        return False, "⏳ Still processing...", [html.Li("Running...")]
     return dash.no_update, dash.no_update, dash.no_update
 
 if __name__ == '__main__':
