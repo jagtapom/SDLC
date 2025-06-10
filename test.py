@@ -78,3 +78,16 @@ class TestAutoGenPipeline(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+| **Component**          | **Role/Responsibility**                                      | **Test Case** Description                                        | **Type of Test**         | **Test File Suggestion**  |
+| ---------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------- | ------------------------ | ------------------------- |
+| `ba_agent`             | Extracts business requirements from document                 | Ensure correct requirement extraction from sample input          | Unit Test                | `test_ba_agent.py`        |
+| `coder_agent`          | Generates code from logical model or requirements            | Validate Python/CI code generation logic                         | Unit / Integration       | `test_coder_agent.py`     |
+| `architect_agent`      | Designs logical data model, triggers JIRA ticket creation    | Verify model structure, check JIRA ticket creation               | Unit / Integration       | `test_architect_agent.py` |
+| `jira_agent`           | Interfaces with JIRA via REST API to create story            | Ensure JIRA ticket is created with correct payload & response    | Integration              | `test_jira_agent.py`      |
+| `user_agent`           | Human-in-the-loop feedback control                           | Mock approval/rejection logic for translation & deployment steps | Mock/Workflow Test       | `test_user_agent.py`      |
+| `HITL (Human-in-Loop)` | Approves after translation & pre-deployment                  | Ensure process blocks until manual approval                      | Workflow + UI Simulation | `test_hitl.py`            |
+| `orchestrator.py`      | Coordinates agent execution via AutoGen Group Chat           | Test agent call sequence, response merging, group orchestration  | End-to-End / Integration | `test_orchestrator.py`    |
+| `bedrock_llm_client`   | Connects to AWS Bedrock (Claude 3.5) for all LLM tasks       | Validate Bedrock connection, test prompt→response workflow       | Connection / Unit Test   | `test_bedrock_client.py`  |
+| `env loader`           | Loads AWS / JIRA credentials from `.env` securely            | Test for missing env vars, fallback, and load correctness        | Config / Unit Test       | `test_env.py`             |
+| `file_writer_service`  | Writes generated output (model/code/yaml) to disk            | Validate correct file creation with content                      | Unit Test                | `test_file_writer.py`     |
+| `logger_service`       | Logs all agent activity (PII, architecture, ticketing, etc.) | Ensure correct log rotation, error capture                       | Logging Test             | `test_logger.py`          |
