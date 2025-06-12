@@ -28,12 +28,13 @@ completed_steps = set()
 
 # Wizard Side Panel
 with ui.column().classes("w-1/4 bg-blue-900 text-white p-4") as sidebar:
-    ui.label("\ud83e\udde0 SDLC Wizard Steps").classes("text-xl mb-4 text-blue-300")
+    ui.label("SDLC Wizard Steps").classes("text-xl mb-4 text-blue-300")
     wizard_list = ui.element('ul').classes('q-pl-none')
     for i, step in enumerate(steps, 1):
-        status_icon = "✅" if i in completed_steps else "🔲"
+        status_icon = "[X]" if i in completed_steps else "[>]" if i == current_step else "[ ]""✅" if i in completed_steps else "🔲"
         with wizard_list:
-            ui.element('li').classes('q-mb-xs').props('style="list-style:none;"').text(f"{status_icon} {step}")
+            with ui.element('li').classes('q-mb-xs').props('style="list-style:none;"'):
+                ui.label(f"{status_icon} {step}")
             ui.separator()
 
 # Main Panel
