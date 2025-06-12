@@ -112,8 +112,16 @@ async def simulate_agent(name, message):
 
 
 async def simulate_hitl(prompt):
-    approved = await ui.dialog(prompt, options=["Yes", "No"]).run()
-    if approved == "No":
+    result = None
+    dialog = ui.dialog()
+    with dialog:
+        with ui.card():
+            ui.label(prompt)
+            with ui.row():
+                ui.button("Yes", on_click=lambda: dialog.submit("Yes"))
+                ui.button("No", on_click=lambda: dialog.submit("No"))
+    result = await dialog
+    if result == "No":
         ui.notify("Please revise before proceeding", color="negative")
         await simulate_hitl(prompt)
 
