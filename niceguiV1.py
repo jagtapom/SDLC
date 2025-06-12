@@ -1,28 +1,19 @@
 from nicegui import ui
-import os
-import base64
+import asyncio
 from datetime import datetime
 
-UPLOAD_DIR = 'uploads'
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-# Global state
-agent_logs = []
 status_flags = {
-    'uploaded': False,
-    'run_started': False,
-    'run_done': False,
-    'stories_approved': False,
-    'code_approved': False,
-    'jira_created': False,
-    'jira_ticket': '',
-}
-result_files = {
-    'stories': '',
-    'code': ''
+    "uploaded": False,
+    "stories_generated": False,
+    "stories_approved": False,
+    "jira_created": False,
+    "code_generated": False,
+    "code_approved": False,
+    "outputs_reviewed": False
 }
 
-# Wizard Step Display
+agent_logs = []
+
 steps = [
     "1. Upload Requirement",
     "2. Generate User Stories",
@@ -30,97 +21,89 @@ steps = [
     "4. Create JIRA Ticket",
     "5. Generate Code",
     "6. HITL: Approve Code",
-    "7. Review Outputs",
+    "7. Review Outputs"
 ]
 
-current_step = 0
+completed_steps = set()
 
-@ui.page('/')
-def main_page():
-    global current_step
-
-    with ui.row().classes('w-full'):
-
-        # Left panel
-        with ui.column().classes('w-1/4 q-pa-md'):
-            ui.label('🧠 SDLC Wizard Steps').classes('text-h6 text-primary')
-            wizard_list = ui.element('ul').classes('text-white')
-            for i, step in enumerate(steps):
-                status_icon = '✅' if i < current_step else ('🔵' if i == current_step else '⬜')
-                ui.element('li').classes('q-mb-xs').text(f"{status_icon} {step}").props('style="list-style:none;"').parent = wizard_list
-            ui.separator()
-            debug_info = ui.label().classes('text-subtitle2 text-grey-4')
-
-        # Right panel
-        with ui.column().classes('w-3/4 q-pa-md'):
-            ui.label('SDLC Automation').classes('text-h4 text-primary')
+# Wizard Side Panel
+with ui.column().classes("w-1/4 bg-blue-900 text-white p-4") as sidebar:
+    ui.label("\ud83e\udde0 SDLC Wizard Steps").classes("text-xl mb-4 text-blue-300")
+    wizard_list = ui.element('ul').classes('q-pl-none')
+    for i, step in enumerate(steps, 1):
+        status_icon = "✅" if i in completed_steps else "🔲"
+        with wizard_list:
+            ui.element('li').classes('q-mb-xs').props('style="list-style:none;"').text(f"{status_icon} {step}")
             ui.separator()
 
-            file_label = ui.label().classes('text-green')
+# Main Panel
+with ui.column().classes("w-3/4 p-4") as main_panel:
+    ui.label("SDLC Automation").classes("text-2xl text-blue-300 text-center mb-6")
 
-            file_upload = ui.upload(on_upload=lambda e: handle_upload(e, file_label), label='📂 Upload Requirements File')
-            file_upload.props('accept=".txt,.pdf"')
+    upload = ui.upload(on_upload=lambda e: handle_upload(e), auto_upload=True)
+    file_status = ui.label().classes("text-green-400 mt-2")
+    run_button = ui.button("Process Requirements", on_click=lambda: trigger_pipeline()).classes("mt-4")
 
-            ui.button('🚀 Process Requirements', on_click=start_pipeline, color='primary')
-
-            log_display = ui.column().classes('q-pa-md bg-dark text-blue-3 rounded-borders')
-            for log in agent_logs:
-                ui.label(log).classes('text-caption').parent = log_display
-
-            # Debug Section
-            def update_debug():
-                debug_info.text = f"Stories File: {result_files['stories']} | Code File: {result_files['code']} | JIRA: {status_flags['jira_ticket']}"
-            ui.timer(2.0, lambda: refresh_logs(log_display, update_debug))
-
-def handle_upload(e, label):
-    content = e.content
-    filename = e.name
-    filepath = os.path.join(UPLOAD_DIR, f"upload_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{filename}")
-    with open(filepath, 'wb') as f:
-        f.write(content)
-    label.text = f"📁 Uploaded: {filename}"
-    status_flags['uploaded'] = True
+    ui.label("Agent Execution Log").classes("text-xl mt-6 text-blue-200")
+    log_area = ui.column().classes("bg-gray-900 text-white p-3 rounded-lg text-sm")
 
 
-def start_pipeline():
-    global current_step
+async def trigger_pipeline():
+    run_button.disable()
     agent_logs.clear()
-    status_flags.update({
-        'run_started': True,
-        'run_done': False,
-        'stories_approved': False,
-        'code_approved': False,
-        'jira_created': False,
-        'jira_ticket': '',
-    })
+    log_area.clear()
+    
+    await simulate_agent("Translator Agent", "Processed input and converted to English")
+    status_flags["uploaded"] = True
+    completed_steps.add(1)
+    
+    await simulate_agent("BA Agent", "Generated user stories")
+    status_flags["stories_generated"] = True
+    completed_steps.add(2)
 
-    # Simulate pipeline
-    now = datetime.now().strftime("%Y%m%d_%H%M%S")
-    agent_logs.append("Translator Agent: Processed input and translated.")
-    agent_logs.append("BA Agent: Created user stories.")
-    result_files['stories'] = f"stories_{now}.txt"
-    open(os.path.join(UPLOAD_DIR, result_files['stories']), 'w').write("User Story: Extract data.")
-    status_flags['stories_approved'] = True
+    await simulate_hitl("Do you approve the user stories?")
+    status_flags["stories_approved"] = True
+    completed_steps.add(3)
 
-    current_step = 4
+    await simulate_agent("JIRA Agent", "Created ticket JIRA-12345")
+    status_flags["jira_created"] = True
+    completed_steps.add(4)
 
-    agent_logs.append("JIRA Agent: Created ticket JIRA-4321.")
-    status_flags['jira_ticket'] = 'JIRA-4321'
-    status_flags['jira_created'] = True
+    await simulate_agent("CodeGen Agent", "Generated Python code for requirement")
+    status_flags["code_generated"] = True
+    completed_steps.add(5)
 
-    agent_logs.append("CodeGen Agent: Generated Python code.")
-    result_files['code'] = f"program_{now}.py"
-    open(os.path.join(UPLOAD_DIR, result_files['code']), 'w').write("def run(): pass")
-    status_flags['code_approved'] = True
+    await simulate_hitl("Do you approve the generated code?")
+    status_flags["code_approved"] = True
+    completed_steps.add(6)
 
-    current_step = 7
-    status_flags['run_done'] = True
+    status_flags["outputs_reviewed"] = True
+    completed_steps.add(7)
+    
+    log_area.clear()
+    for msg in agent_logs:
+        ui.label(msg).classes("text-white text-sm")
+
+    ui.notify("✅ Pipeline completed successfully")
 
 
-def refresh_logs(display, update_debug):
-    display.clear()
-    for log in agent_logs:
-        ui.label(log).classes('text-caption').parent = display
-    update_debug()
+def handle_upload(e):
+    file_status.set_text(f"Uploaded: {e.name}")
+    status_flags["uploaded"] = True
+    completed_steps.add(1)
+
+
+async def simulate_agent(name, message):
+    agent_logs.append(f"{name}: {message}")
+    ui.label(f"{name}: {message}").classes("text-green-300")
+    await asyncio.sleep(1.5)
+
+
+async def simulate_hitl(prompt):
+    approved = await ui.dialog(prompt, options=["Yes", "No"]).run()
+    if approved == "No":
+        ui.notify("Please revise before proceeding", color="negative")
+        await simulate_hitl(prompt)
+
 
 ui.run()
