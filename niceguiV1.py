@@ -25,13 +25,14 @@ steps = [
 ]
 
 completed_steps = set()
+current_step = 1  # initialize current_step to avoid NameError
 
 # Wizard Side Panel
 with ui.column().classes("w-1/4 bg-blue-900 text-white p-4") as sidebar:
     ui.label("SDLC Wizard Steps").classes("text-xl mb-4 text-blue-300")
     wizard_list = ui.element('ul').classes('q-pl-none')
     for i, step in enumerate(steps, 1):
-        status_icon = "[X]" if i in completed_steps else "[>]" if i == current_step else "[ ]""✅" if i in completed_steps else "🔲"
+        status_icon = "[X]" if i in completed_steps else "[>]" if i == current_step else "[ ]"
         with wizard_list:
             with ui.element('li').classes('q-mb-xs').props('style="list-style:none;"'):
                 ui.label(f"{status_icon} {step}")
@@ -50,37 +51,45 @@ with ui.column().classes("w-3/4 p-4") as main_panel:
 
 
 async def trigger_pipeline():
+    global current_step
     run_button.disable()
     agent_logs.clear()
     log_area.clear()
-    
+
+    current_step = 2
     await simulate_agent("Translator Agent", "Processed input and converted to English")
     status_flags["uploaded"] = True
     completed_steps.add(1)
-    
+
+    current_step = 3
     await simulate_agent("BA Agent", "Generated user stories")
     status_flags["stories_generated"] = True
     completed_steps.add(2)
 
+    current_step = 4
     await simulate_hitl("Do you approve the user stories?")
     status_flags["stories_approved"] = True
     completed_steps.add(3)
 
+    current_step = 5
     await simulate_agent("JIRA Agent", "Created ticket JIRA-12345")
     status_flags["jira_created"] = True
     completed_steps.add(4)
 
+    current_step = 6
     await simulate_agent("CodeGen Agent", "Generated Python code for requirement")
     status_flags["code_generated"] = True
     completed_steps.add(5)
 
+    current_step = 7
     await simulate_hitl("Do you approve the generated code?")
     status_flags["code_approved"] = True
     completed_steps.add(6)
 
+    current_step = 8
     status_flags["outputs_reviewed"] = True
     completed_steps.add(7)
-    
+
     log_area.clear()
     for msg in agent_logs:
         ui.label(msg).classes("text-white text-sm")
