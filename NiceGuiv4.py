@@ -3,8 +3,11 @@ import os
 import sys
 import json
 import logging
+import io
 from pathlib import Path
 from datetime import datetime
+import docx  # for .docx support
+import PyPDF2  # for .pdf support
 
 # Add project root to Python path
 project_root = str(Path(__file__).parent.parent)
@@ -27,42 +30,57 @@ state = {
 
 logger = logging.getLogger(__name__)
 
-steps = [
-    "1. Upload Requirement",
-    "2. Generate User Stories",
-    "3. HITL: Approve Stories",
-    "4. Create JIRA Ticket",
-    "5. Generate Code",
-    "6. HITL: Approve Code",
-    "7. Review Outputs"
-]
+def extract_text_from_file(file_content: bytes, filename: str) -> str:
+    ext = filename.split('.')[-1].lower()
 
-completed_steps = set()
+    if ext == "txt":
+        return file_content.decode('utf-8', errors='ignore')
 
-# Layout
-with ui.row().classes("w-full"):
-    with ui.column().classes("w-1/4 bg-blue-900 text-white p-4 min-h-screen"):
-        ui.image("https://upload.wikimedia.org/wikipedia/en/3/30/Barclays_logo.svg").classes("mb-4").style("width: 120px")
-        ui.label("SDLC Wizard Steps").classes("text-xl mb-4 text-blue-300")
-        for i, step in enumerate(steps, 1):
-            status_icon = "✅" if step in completed_steps else "🔄"
-            ui.label(f"{status_icon} {step}").classes("text-white mb-1")
+    elif ext == "pdf":
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
+        return "\n".join([p.extract_text() for p in pdf_reader.pages if p.extract_text()])
 
-    with ui.column().classes("w-3/4 p-6 bg-white min-h-screen shadow-md"):
-        ui.label("SDLC Automation Dashboard").classes("text-3xl text-primary mb-6 text-center")
+    elif ext == "docx":
+        doc = docx.Document(io.BytesIO(file_content))
+        return "\n".join([para.text for para in doc.paragraphs])
+
+    else:
+        raise ValueError(f"Unsupported file type: {ext}")
+
+# Debug Sidebar
+with ui.column().classes('fixed right-0 top-0 m-4 bg-white shadow-lg p-4 rounded max-w-xs'):
+    ui.label("Debug Info")
+    ui.label().bind_text_from(state, 'workflow_status', lambda v: f"Workflow Status: {v}")
+    ui.label().bind_text_from(state, 'stories_file', lambda v: f"Stories File: {v or 'None'}")
+    ui.label().bind_text_from(state, 'stories_approved', lambda v: f"Stories Approved: {v}")
+    ui.label().bind_text_from(state, 'code_file', lambda v: f"Program File: {v or 'None'}")
+    ui.label().bind_text_from(state, 'code_approved', lambda v: f"Code Approved: {v}")
+    ui.label(f"Chat Manager: {'Active' if state['chat_manager'] else 'None'}")
+
+with ui.row().classes('m-4'):
+    with ui.column().classes('w-2/3'):
+        ui.label("SDLC Automation").classes("text-2xl font-bold mb-4")
 
         def handle_upload(e):
             file = e.name
+            file_content = e.content.read()
             input_dir = os.path.join(project_root, "input")
             os.makedirs(input_dir, exist_ok=True)
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            new_filename = f"upload_{timestamp}.txt"
+            new_filename = f"upload_{timestamp}.{file.split('.')[-1]}"
             file_path = os.path.join(input_dir, new_filename)
-            with open(file_path, "wb") as f:
-                f.write(e.content.read())
-            state["uploaded_file_path"] = file_path
-            ui.notify(f"File uploaded and saved as: {new_filename}")
-            logger.info(f"Saved uploaded file to: {file_path}")
+
+            try:
+                extracted_text = extract_text_from_file(file_content, file)
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(extracted_text)
+
+                state["uploaded_file_path"] = file_path
+                ui.notify(f"✅ File uploaded and saved as: {new_filename}")
+                logger.info(f"Saved and parsed file to: {file_path}")
+            except Exception as ex:
+                ui.notify(f"❌ Failed to parse file: {str(ex)}", color="negative")
 
         ui.upload(on_upload=handle_upload, label="Upload Requirements File", auto_upload=True)
 
