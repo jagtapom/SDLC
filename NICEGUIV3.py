@@ -40,17 +40,17 @@ with ui.row().classes("w-full"):
                 ui.separator()
 
     with ui.column().classes("w-4/5 min-h-screen p-4 bg-white"):
-        with ui.row().classes("w-full items-start gap-8"):
-            with ui.column().classes("w-1/2 bg-gray-50 p-6 shadow-md rounded-md"):
-                ui.label("SDLC Automation Dashboard").classes("text-2xl text-primary font-semibold mb-4")
-                ui.label("Upload Requirements File").classes("text-lg text-blue-600 mb-3")
-                upload = ui.upload(on_upload=lambda e: handle_upload(e), auto_upload=True).props('accept=".pdf,.txt,.docx"').classes("mb-2")
-                file_status = ui.label().classes("text-green-600")
-                run_button = ui.button("🚀 Process Requirements", on_click=lambda: trigger_pipeline(), color="primary").classes("mt-4")
+    with ui.row().classes("w-full gap-6"):
+        with ui.card().classes("w-1/2 bg-gray-50 p-6 shadow-md"):
+            ui.label("SDLC Automation Dashboard").classes("text-2xl text-primary font-semibold mb-4")
+            ui.label("Upload Requirements File").classes("text-lg text-blue-600 mb-3")
+            upload = ui.upload(on_upload=lambda e: handle_upload(e), auto_upload=True).props('accept=".pdf,.txt,.docx"').classes("mb-2")
+            file_status = ui.label().classes("text-green-600")
+            run_button = ui.button("🚀 Process Requirements", on_click=lambda: trigger_pipeline(), color="primary").classes("mt-4")
 
-            with ui.column().classes("w-1/2 bg-gray-100 p-6 rounded-md shadow-md"):
-                ui.label("Agent Execution Log").classes("text-lg text-blue-600 mb-3")
-                log_area = ui.column().classes("bg-black text-white p-4 rounded-md text-sm space-y-1 h-96 overflow-auto")
+        with ui.card().classes("w-1/2 bg-gray-100 p-6 shadow-md"):
+            ui.label("Agent Execution Log").classes("text-lg text-blue-600 mb-3")
+            log_area = ui.column().classes("bg-black text-white p-4 rounded-md text-sm space-y-1 h-96 overflow-auto")
 
 
 async def trigger_pipeline():
