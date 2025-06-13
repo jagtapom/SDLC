@@ -27,32 +27,39 @@ state = {
 
 logger = logging.getLogger(__name__)
 
-# Debug Sidebar
-with ui.column().classes('fixed right-0 top-0 m-4 bg-white shadow-lg p-4 rounded max-w-xs'):
-    ui.label("Debug Info")
-    ui.label().bind_text_from(state, 'workflow_status', lambda v: f"Workflow Status: {v}")
-    ui.label().bind_text_from(state, 'stories_file', lambda v: f"Stories File: {v or 'None'}")
-    ui.label().bind_text_from(state, 'stories_approved', lambda v: f"Stories Approved: {v}")
-    ui.label().bind_text_from(state, 'code_file', lambda v: f"Program File: {v or 'None'}")
-    ui.label().bind_text_from(state, 'code_approved', lambda v: f"Code Approved: {v}")
-    ui.label(f"Chat Manager: {'Active' if state['chat_manager'] else 'None'}")
+steps = [
+    "1. Upload Requirement",
+    "2. Generate User Stories",
+    "3. HITL: Approve Stories",
+    "4. Create JIRA Ticket",
+    "5. Generate Code",
+    "6. HITL: Approve Code",
+    "7. Review Outputs"
+]
 
-with ui.row().classes('m-4'):
-    with ui.column().classes('w-2/3'):
-        ui.label("SDLC Automation").classes("text-2xl font-bold mb-4")
+completed_steps = set()
+
+# Layout
+with ui.row().classes("w-full"):
+    with ui.column().classes("w-1/4 bg-blue-900 text-white p-4 min-h-screen"):
+        ui.image("https://upload.wikimedia.org/wikipedia/en/3/30/Barclays_logo.svg").classes("mb-4").style("width: 120px")
+        ui.label("SDLC Wizard Steps").classes("text-xl mb-4 text-blue-300")
+        for i, step in enumerate(steps, 1):
+            status_icon = "✅" if step in completed_steps else "🔄"
+            ui.label(f"{status_icon} {step}").classes("text-white mb-1")
+
+    with ui.column().classes("w-3/4 p-6 bg-white min-h-screen shadow-md"):
+        ui.label("SDLC Automation Dashboard").classes("text-3xl text-primary mb-6 text-center")
 
         def handle_upload(e):
             file = e.name
             input_dir = os.path.join(project_root, "input")
             os.makedirs(input_dir, exist_ok=True)
-
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             new_filename = f"upload_{timestamp}.txt"
             file_path = os.path.join(input_dir, new_filename)
-
             with open(file_path, "wb") as f:
                 f.write(e.content.read())
-
             state["uploaded_file_path"] = file_path
             ui.notify(f"File uploaded and saved as: {new_filename}")
             logger.info(f"Saved uploaded file to: {file_path}")
