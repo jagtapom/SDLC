@@ -39,7 +39,7 @@ with ui.row().classes("w-full"):
                     ui.label(f"{status_icon} {step}").classes("text-sm")
                 ui.separator()
 
-    with ui.column().classes("w-4/5 min-h-screen p-4 bg-white"):
+    with ui.row().classes("w-4/5 min-h-screen p-4 bg-white items-start gap-6"):
     with ui.row().classes("w-full gap-6"):
         with ui.card().classes("w-1/2 bg-gray-50 p-6 shadow-md"):
             ui.label("SDLC Automation Dashboard").classes("text-2xl text-primary font-semibold mb-4")
