@@ -1,0 +1,168 @@
+from autogen import GroupChat, GroupChatManager
+from src.agents.ba_agent import ba_agent
+from src.agents.jira_agent import jira_agent
+from src.agents.user_agent import user_agent
+from src.agents.coder_agent import coder_agent
+from src.config.settings import LLM_CONFIG
+from nicegui import app
+import os
+import json
+from pathlib import Path
+import logging
+from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
+
+# Global variable for file path
+abs_file_path = None
+
+def create_ba_agent():
+    return ba_agent
+
+def create_user_agent():
+    return user_agent
+
+def create_jira_agent():
+    return jira_agent
+
+def create_coder_agent():
+    return coder_agent
+
+def custom_speaker_selection(last_speaker, groupchat: GroupChat):
+    if not last_speaker:
+        return ba_agent
+
+    last_message = groupchat.messages[-1] if groupchat.messages else None
+    content = last_message.get('content', '') if last_message else ''
+
+    logger.info(f"Last speaker: {last_speaker.name}")
+    logger.info(f"Message content: {content[:200]}...")
+
+    workflow_status = app.storage.user.get("workflow_status", "initial")
+    stories_approved = app.storage.user.get("stories_approved", False)
+    code_approved = app.storage.user.get("code_approved", False)
+    stories_file = app.storage.user.get("stories_file")
+    code_file = app.storage.user.get("code_file")
+
+    project_root = Path(__file__).parent.parent.parent
+    workspace_root = "/Users/mystic/Documents/projects/autogen-sdlc"
+
+    logger.info(f"Current workflow status: {workflow_status}")
+    logger.info(f"Stories approved: {stories_approved}")
+    logger.info(f"Code approved: {code_approved}")
+    logger.info(f"Stories file: {stories_file}")
+    logger.info(f"Code file: {code_file}")
+    logger.info(f"Project root: {project_root}")
+    logger.info(f"Workspace root: {workspace_root}")
+
+    if last_speaker is ba_agent:
+        if "Generated and saved" in content:
+            app.storage.user["workflow_status"] = "stories_generated"
+            return user_agent
+        return ba_agent
+
+    elif last_speaker is user_agent:
+        if stories_approved and workflow_status == "stories_approved":
+            return jira_agent
+        elif code_approved and workflow_status == "code_approved":
+            return None
+        return user_agent
+
+    elif last_speaker is jira_agent:
+        if "Stories created in Jira" in content:
+            app.storage.user["workflow_status"] = "code_generation"
+            return coder_agent
+        return jira_agent
+
+    elif last_speaker is coder_agent:
+        if code_file and os.path.exists(code_file):
+            app.storage.user["workflow_status"] = "code_generated"
+            return user_agent
+        return coder_agent
+
+    return ba_agent
+
+def message_handler(recipient, messages, sender, config):
+    if not messages:
+        return None, None
+
+    current_message = messages[-1].get('content', '')
+    logger.info(f"\n=== Message from {sender.name} ===")
+    logger.info(f"Message: {current_message[:200]}...")
+
+    if sender.name == 'BA_Agent':
+        if "Generated and saved" in current_message or "successfully processed" in current_message:
+            input_filename = os.path.basename(abs_file_path)
+            stories_file = f"stories_{input_filename}"
+            app.storage.user["stories_file"] = stories_file
+            app.storage.user["workflow_status"] = "stories_generated"
+            logger.info(f"Set stories file in session state: {stories_file}")
+            return user_agent, current_message
+        logger.info("Continuing with BA Agent")
+        return ba_agent, current_message
+
+    elif sender.name == 'User_Agent':
+        if app.storage.user.get("workflow_status") == "validating_stories":
+            logger.info("User Agent validating stories")
+            return user_agent, "Please validate the stories and provide feedback."
+        elif "Stories approved" in current_message:
+            logger.info("User Agent approved stories, transitioning to Jira Agent")
+            app.storage.user["workflow_status"] = "stories_approved"
+            return jira_agent, "Create Jira tickets from the stories in the stories folder."
+        elif "Waiting for approval" in current_message:
+            logger.info("User Agent waiting for approval")
+            return user_agent, current_message
+        else:
+            logger.info("User Agent processing message")
+            return user_agent, current_message
+
+    elif sender.name == 'Jira_Agent':
+        if "Stories created in Jira" in current_message:
+            logger.info("Jira Agent completed, workflow finished")
+            app.storage.user["workflow_status"] = "completed"
+            return None, None
+        else:
+            logger.info("Jira Agent processing message")
+            return jira_agent, current_message
+
+    return recipient, current_message
+
+def update_group_chat(message: str):
+    try:
+        if "chat_manager" in app.storage.user and app.storage.user["chat_manager"]:
+            manager = app.storage.user["chat_manager"]
+            manager.run(message)
+            logger.info(f"Group chat updated with message: {message[:200]}...")
+        else:
+            logger.error("No chat manager found in session state")
+    except Exception as e:
+        logger.error(f"Error updating group chat: {str(e)}")
+
+def start_agent_workflow(file_path: str) -> None:
+    try:
+        logger.info("\n=== Starting Workflow ===")
+        logger.info(f"Processing file: {file_path}")
+
+        groupchat = GroupChat(
+            agents=[ba_agent, user_agent, jira_agent, coder_agent],
+            messages=[],
+            max_round=10,
+            speaker_selection_method=custom_speaker_selection
+        )
+
+        manager = GroupChatManager(
+            groupchat=groupchat,
+            llm_config=LLM_CONFIG
+        )
+
+        app.storage.user["chat_manager"] = manager
+
+        logger.info("\n=== Starting BA Agent ===")
+        ba_agent.initiate_chat(
+            manager,
+            message=f"Read the requirements file at '{file_path}' and generate Jira stories. Save them to the stories folder and return a success message."
+        )
+
+    except Exception as e:
+        logger.error(f"Error in workflow: {str(e)}")
+        raise
