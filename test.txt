@@ -1,0 +1,30 @@
+Subject: Progress Update: Migration from Streamlit to NiceGUI for HDLC Automation Dashboard
+
+Dear [Leadership Team / Respected Leaders],
+
+I hope this message finds you well.
+
+I wanted to provide a quick update on the UI modernization efforts for the HDLC Automation Dashboard. As part of our exploration, I’ve been working on transitioning the existing Streamlit-based application to NiceGUI, a more flexible and scalable alternative for building production-grade web interfaces.
+
+So far, I have successfully:
+
+Replicated the Streamlit functionality in NiceGUI with a cleaner and more responsive UI.
+
+Integrated the BA Agent from our AutoGen backend to generate user stories based on uploaded requirements.
+
+Implemented Human-in-the-Loop (HITL) approval, dynamically showing UI elements based on agent output.
+
+Designed the interface to efficiently manage state and improve user interaction with minimal frontend code.
+
+Key Observations: NiceGUI vs Streamlit
+Feature	Streamlit	NiceGUI
+UI Flexibility	Limited, suitable for quick dashboards	Highly customizable, production-ready layouts
+State Management	Session-based, limited interactivity	React-style reactivity, more dynamic
+Component Control	Simple but rigid component control	Fine-grained control, supports real-time UI
+Scalability	Suitable for POCs	Better suited for scalable enterprise apps
+Human-in-the-Loop UX	Achievable, but harder to extend	Seamless and dynamic interactions
+
+The next milestone is to finalize the integration of the JIRA agent post-HITL approval, completing the automation workflow.
+
+I look forward to sharing the complete demo soon. Please feel free to reach out if you'd like an early walkthrough.
+
