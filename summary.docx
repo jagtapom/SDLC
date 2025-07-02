@@ -1,0 +1,7 @@
+Each framework—Streamlit, Plotly Dash, and NiceGUI—brings unique strengths to the table, particularly when applied to complex SDLC pipelines that require Human-in-the-Loop (HITL) interaction, modularity, and real-time feedback.
+
+Streamlit excels in rapid prototyping and simplicity. Its Pythonic syntax and widget integration make it ideal for data scientists and ML practitioners needing quick feedback loops. However, for multi-user HITL or more interactive workflows, it may require workarounds.
+
+Plotly Dash stands out for enterprise-grade data visualization and structured app development. It offers advanced callbacks and layout management, making it a solid choice for complex analytical dashboards. Its steep learning curve and verbosity may limit rapid iterations in early-stage SDLC workflows.
+
+NiceGUI is emerging as a modern, full-stack UI framework with seamless FastAPI integration. It supports real-time interactivity, session-aware state, and native HITL design using UI events—making it particularly well-suited for automated agents and approval-based pipelines in SDLC.
