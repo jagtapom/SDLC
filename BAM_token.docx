@@ -1,0 +1,456 @@
+POD-1 is BAM-authenticated and runs the frontend + application logic
+
+POD-2 is a gateway (via FastAPI) to on-prem tools like Confluence/JIRA
+
+POD-1 securely invokes POD-2
+
+POD-2 uses Kubernetes secrets to access on-prem tools
+
+✅ HIGH-LEVEL IMPLEMENTATION OVERVIEW
+text
+Copy
+Edit
+1. Docker Image for POD-1 (BAM-auth + frontend logic)
+2. Docker Image for POD-2 (FastAPI + on-prem tool integration)
+3. Kubernetes Secrets for on-prem credentials
+4. Kubernetes Deployments for both pods
+5. Internal Kubernetes Service to expose POD-2
+6. Secure inter-pod authentication (BAM token or internal headers)
+7. VPN / Direct Connect already set up between EKS ↔ On-Prem
+🔧 STEP-BY-STEP IMPLEMENTATION
+🐳 1. Docker Image: POD-1 (Frontend + BAM)
+Dockerfile (pod1/Dockerfile):
+
+Dockerfile
+Copy
+Edit
+FROM node:18-alpine
+WORKDIR /app
+COPY . .
+RUN npm install
+CMD ["npm", "start"]
+This frontend:
+
+Authenticates via BAM
+
+Stores BAM token in local/session storage
+
+Calls POD-2 backend to trigger Confluence updates
+
+🐳 2. Docker Image: POD-2 (FastAPI + Tool Gateway)
+Dockerfile (pod2/Dockerfile):
+
+Dockerfile
+Copy
+Edit
+FROM python:3.10-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["uvicorn", "tool_gateway:app", "--host", "0.0.0.0", "--port", "8080"]
+requirements.txt
+
+nginx
+Copy
+Edit
+fastapi
+uvicorn
+requests
+tool_gateway.py
+
+python
+Copy
+Edit
+from fastapi import FastAPI, Request, HTTPException
+import os, requests
+
+app = FastAPI()
+INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN")
+
+@app.post("/update-confluence")
+async def update_confluence(request: Request):
+    headers = request.headers
+    internal_token = headers.get("X-Internal-Token")
+    user_email = headers.get("X-User-Email")
+
+    if internal_token != INTERNAL_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid internal token")
+
+    data = await request.json()
+    page_id = data["page_id"]
+    content = data["content"]
+
+    # Prepare request to Confluence (on-prem)
+    response = requests.put(
+        f"http://onprem-confluence/rest/api/content/{page_id}",
+        auth=(os.getenv("CONF_USER"), os.getenv("CONF_TOKEN")),
+        json={
+            "version": {"number": 2},
+            "title": "Updated from App",
+            "type": "page",
+            "body": {
+                "storage": {
+                    "value": content,
+                    "representation": "storage"
+                }
+            }
+        }
+    )
+    return {"status": response.status_code, "detail": response.text}
+🔐 3. Kubernetes Secret for On-Prem Auth
+yaml
+Copy
+Edit
+apiVersion: v1
+kind: Secret
+metadata:
+  name: confluence-secrets
+type: Opaque
+stringData:
+  CONF_USER: admin
+  CONF_TOKEN: your-confluence-token
+  INTERNAL_TOKEN: abc123secure
+🚀 4. Kubernetes Deployment: POD-1
+yaml
+Copy
+Edit
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: your-registry/pod1:latest
+        ports:
+        - containerPort: 3000
+🚀 5. Kubernetes Deployment: POD-2
+yaml
+Copy
+Edit
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tool-gateway-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tool-gateway
+  template:
+    metadata:
+      labels:
+        app: tool-gateway
+    spec:
+      containers:
+      - name: tool-gateway
+        image: your-registry/pod2:latest
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - secretRef:
+            name: confluence-secrets
+🌐 6. Internal Service to Expose POD-2 to POD-1
+yaml
+Copy
+Edit
+apiVersion: v1
+kind: Service
+metadata:
+  name: tool-gateway-service
+spec:
+  selector:
+    app: tool-gateway
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
+Now POD-1 can call http://tool-gateway-service:8080/update-confluence
+
+🔐 7. POD-1 Internal Call Example (with identity forwarding)
+js
+Copy
+Edit
+// In frontend/backend logic in POD-1
+fetch("http://tool-gateway-service:8080/update-confluence", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-User-Email": "user@company.com",
+    "X-Internal-Token": "abc123secure"
+  },
+  body: JSON.stringify({
+    page_id: "123456",
+    content: "<h1>Updated via BAM user</h1>"
+  })
+})
+🧪 Optional: Add NetworkPolicy (restrict traffic)
+yaml
+Copy
+Edit
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-tools
+spec:
+  podSelector:
+    matchLabels:
+      app: tool-gateway
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend
+🧠 OPTIONS YOU CAN USE FOR AUTH BETWEEN POD-1 and POD-2
+Option	Description	Use Case
+🔐 Forward BAM Token	POD-1 forwards BAM token in Authorization header	Use if POD-2 can validate BAM tokens
+🔐 Internal Header (Recommended)	Use X-Internal-Token with user info headers	Simpler, works well with trusted internal pods
+🔐 mTLS via Service Mesh	POD-1 and POD-2 communicate over mutual TLS	Secure at scale, needs Istio/Linkerd setup
+
+✅ Wrap-up: What You Now Have
+✅ Clear flow:
+
+BAM → POD-1 → POD-2 → On-Prem tools
+
+✅ Secure identity:
+
+Forward user context from POD-1 to POD-2 via headers + internal token
+
+✅ Isolated secrets:
+
+Only POD-2 can access on-prem credentials via Kubernetes Secret
+
+✅ Kubernetes components:
+
+Deployments, Services, Secrets, Internal HTTP flow
+
+*********************************************************
+POD-1 handles frontend and BAM-based auth
+
+POD-2 exposes FastAPI endpoints to call on-prem tools (Confluence/JIRA)
+
+POD-1 securely calls POD-2 using an internal HTTP request and headers
+
+✅ Step 1: Dockerfile for POD-1 (frontend app using BAM)
+<details> <summary>📄 <strong>pod1/Dockerfile</strong></summary>
+Dockerfile
+Copy
+Edit
+# POD-1: Frontend + BAM-authenticated app
+FROM node:18-alpine
+
+WORKDIR /app
+COPY . .
+RUN npm install
+
+EXPOSE 3000
+CMD ["npm", "start"]
+</details>
+✅ Step 2: Dockerfile for POD-2 (FastAPI tool gateway)
+<details> <summary>📄 <strong>pod2/Dockerfile</strong></summary>
+Dockerfile
+Copy
+Edit
+# POD-2: FastAPI tool gateway to on-prem services
+FROM python:3.10-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+EXPOSE 8080
+CMD ["uvicorn", "tool_gateway:app", "--host", "0.0.0.0", "--port", "8080"]
+</details>
+✅ Step 3: requirements.txt for POD-2
+<details> <summary>📄 <strong>pod2/requirements.txt</strong></summary>
+nginx
+Copy
+Edit
+fastapi
+uvicorn
+requests
+</details>
+✅ Step 4: FastAPI App (tool_gateway.py) for POD-2
+<details> <summary>📄 <strong>pod2/tool_gateway.py</strong></summary>
+python
+Copy
+Edit
+from fastapi import FastAPI, Request, HTTPException
+import requests
+import os
+
+app = FastAPI()
+INTERNAL_TOKEN = os.getenv("INTERNAL_TOKEN")
+CONF_USER = os.getenv("CONF_USER")
+CONF_TOKEN = os.getenv("CONF_TOKEN")
+CONFLUENCE_URL = os.getenv("CONFLUENCE_URL")
+
+@app.post("/update-confluence")
+async def update_confluence(request: Request):
+    headers = request.headers
+    token = headers.get("X-Internal-Token")
+    user_email = headers.get("X-User-Email")
+
+    if token != INTERNAL_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid internal token")
+
+    body = await request.json()
+    page_id = body.get("page_id")
+    content = body.get("content")
+
+    if not page_id or not content:
+        raise HTTPException(status_code=400, detail="Missing page_id or content")
+
+    response = requests.put(
+        f"{CONFLUENCE_URL}/rest/api/content/{page_id}",
+        auth=(CONF_USER, CONF_TOKEN),
+        headers={"Content-Type": "application/json"},
+        json={
+            "version": {"number": 2},
+            "title": "Updated from App",
+            "type": "page",
+            "body": {
+                "storage": {
+                    "value": content,
+                    "representation": "storage"
+                }
+            }
+        }
+    )
+
+    return {"status": response.status_code, "detail": response.text}
+</details>
+✅ Step 5: Kubernetes Secret for Confluence creds and internal token
+<details> <summary>📄 <strong>confluence-secrets.yaml</strong></summary>
+yaml
+Copy
+Edit
+apiVersion: v1
+kind: Secret
+metadata:
+  name: confluence-secrets
+type: Opaque
+stringData:
+  CONF_USER: "admin"
+  CONF_TOKEN: "your-api-token"
+  INTERNAL_TOKEN: "abc123secure"
+  CONFLUENCE_URL: "http://onprem-confluence"
+</details>
+✅ Step 6: Deployment for POD-1 (frontend + BAM)
+<details> <summary>📄 <strong>pod1-deployment.yaml</strong></summary>
+yaml
+Copy
+Edit
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: your-registry/pod1:latest
+        ports:
+        - containerPort: 3000
+</details>
+✅ Step 7: Deployment for POD-2 (FastAPI + tool gateway)
+<details> <summary>📄 <strong>pod2-deployment.yaml</strong></summary>
+yaml
+Copy
+Edit
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tool-gateway-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tool-gateway
+  template:
+    metadata:
+      labels:
+        app: tool-gateway
+    spec:
+      containers:
+      - name: tool-gateway
+        image: your-registry/pod2:latest
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - secretRef:
+            name: confluence-secrets
+</details>
+✅ Step 8: Kubernetes Service for POD-2 (internal communication)
+<details> <summary>📄 <strong>tool-gateway-service.yaml</strong></summary>
+yaml
+Copy
+Edit
+apiVersion: v1
+kind: Service
+metadata:
+  name: tool-gateway-service
+spec:
+  selector:
+    app: tool-gateway
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
+</details>
+✅ Step 9: (Optional) NetworkPolicy to restrict access
+<details> <summary>📄 <strong>network-policy.yaml</strong></summary>
+yaml
+Copy
+Edit
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-tools
+spec:
+  podSelector:
+    matchLabels:
+      app: tool-gateway
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: frontend
+</details>
+✅ Step 10: POD-1 Internal HTTP Call Example
+Inside POD-1 backend logic:
+
+js
+Copy
+Edit
+fetch("http://tool-gateway-service:8080/update-confluence", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-User-Email": "user@company.com",
+    "X-Internal-Token": "abc123secure"
+  },
+  body: JSON.stringify({
+    page_id: "123456",
+    content: "<h1>Updated by BAM-authenticated user</h1>"
+  })
+})
